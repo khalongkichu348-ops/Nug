@@ -1,0 +1,1462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>golden_nugget_3d.py — 3D ASCII Chicken Nugget</title>
+  <style>
+    /* ========================================================================
+       BASE RESET & WARM-CHARCOAL TERMINAL THEME (Zero External Dependencies)
+       ======================================================================== */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background-color: #090807;
+      color: #d9cbb8;
+      font-family: 'Cascadia Code', 'Fira Code', 'Consolas', 'Courier New', monospace;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    /* Split-Screen Layout Shell */
+    #appShell {
+      display: flex;
+      flex-direction: column;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background-color: #090807;
+    }
+
+    /* ========================================================================
+       1. TOP CANVAS PANE (~66% height, expands to calc(100vh - 28px))
+       ======================================================================== */
+    #stagePane {
+      position: relative;
+      flex: 1 1 66%;
+      min-height: 0;
+      width: 100%;
+      overflow: hidden;
+      background-color: #090807;
+    }
+
+    #stagePane.expanded {
+      flex: 1 1 calc(100vh - 28px);
+    }
+
+    #nuggetCanvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      cursor: grab;
+      touch-action: none;
+    }
+
+    #nuggetCanvas.dragging {
+      cursor: grabbing;
+    }
+
+    /* In-Canvas Monospace Telemetry Overlays */
+    .hud-overlay {
+      position: absolute;
+      pointer-events: none;
+      z-index: 10;
+      text-shadow: 0 1px 4px rgba(0, 0, 0, 0.96), 0 0 2px rgba(0, 0, 0, 0.94);
+      letter-spacing: 0.015em;
+    }
+
+    #hudTopRight {
+      top: 10px;
+      right: 14px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: rgba(242, 224, 196, 0.90);
+    }
+
+    #hudBottomLeft {
+      bottom: 10px;
+      left: 14px;
+      font-size: 11px;
+      line-height: 1.48;
+      color: rgba(235, 214, 184, 0.88);
+    }
+
+    #telemetryLine1 {
+      white-space: pre;
+    }
+
+    #telemetryLine2 {
+      color: rgba(188, 164, 134, 0.82);
+    }
+
+    .status-dot {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 9999px;
+      flex-shrink: 0;
+    }
+
+    .dot-gold {
+      background-color: #ffbe44;
+      box-shadow: 0 0 6px rgba(255, 190, 68, 0.85);
+    }
+
+    .dot-amber {
+      background-color: #f59e0b;
+      box-shadow: 0 0 5px rgba(245, 158, 11, 0.78);
+    }
+
+    .dot-muted {
+      background-color: #6b6258;
+      box-shadow: none;
+    }
+
+    /* ========================================================================
+       2. MIDDLE TERMINAL DIVIDER / STATUS BAR (28px fixed height)
+       ======================================================================== */
+    #dividerBar {
+      flex: 0 0 28px;
+      height: 28px;
+      width: 100%;
+      background-color: #12100d;
+      border-top: 1px solid #26211b;
+      border-bottom: 1px solid #26211b;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 0 12px;
+      font-size: 11px;
+      line-height: 1;
+      color: #a89884;
+      z-index: 20;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+
+    #dividerBar::-webkit-scrollbar {
+      display: none;
+    }
+
+    .bar-left-cluster {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-shrink: 0;
+    }
+
+    .bar-group {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+
+    .bar-sep {
+      color: #3a3228;
+      padding: 0 2px;
+      user-select: none;
+    }
+
+    .term-btn {
+      background: transparent;
+      border: none;
+      color: #847666;
+      font-family: inherit;
+      font-size: 11px;
+      padding: 3px 6px;
+      border-radius: 3px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: color 0.14s ease, background-color 0.14s ease;
+    }
+
+    .term-btn:hover {
+      color: #f2e4ce;
+      background-color: rgba(235, 175, 85, 0.10);
+    }
+
+    .term-btn.active {
+      font-weight: 600;
+    }
+
+    .term-btn.active-boot {
+      color: #ffd060;
+      text-shadow: 0 0 8px rgba(255, 208, 96, 0.36);
+    }
+
+    .term-btn.active-bell {
+      color: #f7b84b;
+      text-shadow: 0 0 8px rgba(247, 184, 75, 0.36);
+    }
+
+    .term-btn.active-spicy {
+      color: #ff6b3d;
+      text-shadow: 0 0 8px rgba(255, 107, 61, 0.42);
+    }
+
+    .term-btn.toggle-on {
+      color: #f0be74;
+    }
+
+    #statusWrap {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-left: 6px;
+      color: #9c8d7a;
+      white-space: nowrap;
+    }
+
+    /* ========================================================================
+       3. BOTTOM AUTO-SCROLLING CODE PANE (~34% height, collapsible)
+       ======================================================================== */
+    #codePane {
+      position: relative;
+      flex: 0 0 34%;
+      min-height: 0;
+      width: 100%;
+      background-color: #0b0908;
+      overflow-y: auto;
+      overflow-x: auto;
+      scrollbar-width: none;
+      user-select: text;
+      -webkit-user-select: text;
+    }
+
+    #codePane::-webkit-scrollbar {
+      display: none;
+    }
+
+    #codePane.collapsed {
+      flex: 0 0 0px;
+      height: 0;
+      overflow: hidden;
+    }
+
+    #codePane::before,
+    #codePane::after {
+      content: '';
+      position: sticky;
+      display: block;
+      left: 0;
+      right: 0;
+      height: 14px;
+      pointer-events: none;
+      z-index: 5;
+    }
+
+    #codePane::before {
+      top: 0;
+      background: linear-gradient(to bottom, #0b0908 0%, rgba(11, 9, 8, 0) 100%);
+    }
+
+    #codePane::after {
+      bottom: 0;
+      background: linear-gradient(to top, #0b0908 0%, rgba(11, 9, 8, 0) 100%);
+    }
+
+    #codeContent {
+      padding: 2px 14px 18px 8px;
+      font-size: 11px;
+      line-height: 1.56;
+      white-space: pre;
+      tab-size: 4;
+    }
+
+    .code-line {
+      display: flex;
+      align-items: baseline;
+      min-height: 1.56em;
+    }
+
+    .line-num {
+      flex: 0 0 38px;
+      text-align: right;
+      padding-right: 14px;
+      color: #4a4035;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .line-src {
+      color: #cbbca8;
+    }
+
+    /* Warm Python Syntax Highlighting Palette */
+    .syn-kw  { color: #d89b6a; }
+    .syn-fn  { color: #f5c36b; }
+    .syn-num { color: #e88a5a; }
+    .syn-str { color: #a8c77a; }
+    .syn-cm  { color: #66594b; font-style: italic; }
+    .syn-cls { color: #f0d799; }
+
+    /* Mobile & Compact Viewport Adjustments */
+    @media (max-width: 640px) {
+      #dividerBar {
+        padding: 0 6px;
+        font-size: 10px;
+        gap: 6px;
+      }
+      .bar-left-cluster {
+        gap: 8px;
+      }
+      .term-btn {
+        font-size: 10px;
+        padding: 3px 4px;
+      }
+      #hudTopRight, #hudBottomLeft {
+        font-size: 10px;
+      }
+      #codeContent {
+        font-size: 10px;
+      }
+      .line-num {
+        flex: 0 0 28px;
+        padding-right: 8px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="appShell">
+    <!-- ==================== 1. TOP PANE: LIVE 3D ASCII NUGGET ==================== -->
+    <section id="stagePane" aria-label="Real-time 3D rotating ASCII chicken nugget">
+      <canvas id="nuggetCanvas"></canvas>
+
+      <!-- Top-Right Elapsed Timer -->
+      <div id="hudTopRight" class="hud-overlay">
+        <span id="timerDot" class="status-dot dot-gold"></span>
+        <span id="timerReadout">t 00.00s</span>
+      </div>
+
+      <!-- Bottom-Left Live Monospace Telemetry -->
+      <div id="hudBottomLeft" class="hud-overlay">
+        <div id="telemetryLine1">nugget: boot   temp: 168°C   crisp: 98%</div>
+        <div id="telemetryLine2">chars: 0</div>
+      </div>
+    </section>
+
+    <!-- ==================== 2. MIDDLE TERMINAL STATUS BAR ==================== -->
+    <header id="dividerBar" role="toolbar" aria-label="Nugget simulation controls">
+      <div class="bar-left-cluster">
+        <!-- Left: Filename -->
+        <span style="color:#c9b8a1;">golden_nugget_3d.py</span>
+
+        <!-- Center-Left: Nugget Shape & Spice Presets -->
+        <div class="bar-group" role="tablist" aria-label="Nugget presets">
+          <button type="button" role="tab" data-mode="boot" class="term-btn active active-boot" title="Classic Boot Nugget (Key 1)">[ boot ]</button>
+          <span class="bar-sep">|</span>
+          <button type="button" role="tab" data-mode="bell" class="term-btn" title="Classic Bell Nugget (Key 2)">bell</button>
+          <span class="bar-sep">|</span>
+          <button type="button" role="tab" data-mode="spicy" class="term-btn" title="Crispy Spicy Tender-Nugget (Key 3)">spicy</button>
+        </div>
+      </div>
+
+      <!-- Right: Toggles & Live Status -->
+      <div class="bar-group">
+        <button id="codeToggleBtn" type="button" class="term-btn toggle-on" title="Toggle Code Pane (Key C)">code</button>
+        <button id="pauseToggleBtn" type="button" class="term-btn" title="Pause / Resume (Space)">pause</button>
+        <div id="statusWrap">
+          <span id="runDot" class="status-dot dot-amber"></span>
+          <span id="statusReadout">running · 60 fps</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- ==================== 3. BOTTOM PANE: AUTO-SCROLLING CODE ==================== -->
+    <section id="codePane" aria-label="Live scrolling Python SDF raymarcher source">
+      <div id="codeContent"></div>
+    </section>
+  </div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      /* ========================================================================
+         1. CONSTANTS, ASCII RAMP & MODE CONFIGURATIONS
+         ======================================================================== */
+      const ASCII_RAMP = ' .,:;irsXA253hMHGS#9B&@';
+      const RAMP_MAX   = ASCII_RAMP.length - 1;
+      const STEAM_CHARS = ['~', '(', ')', '.', "'"];
+
+      const MODES = {
+        boot: {
+          name: 'boot',
+          tempBase: 168,
+          crispBase: 98,
+          dispAmp: 0.044,
+          detailBump: 0.19,
+          spiceShift: 0.0,
+          boundR: 1.36,
+          desc: 'classic boot silhouette · golden buttermilk batter'
+        },
+        bell: {
+          name: 'bell',
+          tempBase: 165,
+          crispBase: 96,
+          dispAmp: 0.040,
+          detailBump: 0.17,
+          spiceShift: 0.06,
+          boundR: 1.32,
+          desc: 'classic bell silhouette · puffed tempura-style crust'
+        },
+        spicy: {
+          name: 'spicy',
+          tempBase: 176,
+          crispBase: 99,
+          dispAmp: 0.058,
+          detailBump: 0.25,
+          spiceShift: 1.0,
+          boundR: 1.40,
+          desc: 'jagged tender-nugget · cayenne & paprika double-dredge'
+        }
+      };
+
+      /* ========================================================================
+         2. SIMULATION STATE & DOM REFERENCES
+         ======================================================================== */
+      const state = {
+        mode: 'boot',
+        paused: false,
+        codeVisible: true,
+        simTime: 0,
+        fps: 60,
+        liveChars: 0,
+
+        // 3D orientation (radians) & angular inertia
+        rotY: 0.35,
+        rotX: 0.22,
+        rotZ: -0.08,
+        velY: 0.58,
+        velX: 0.0,
+
+        // Interactive pointer drag state
+        dragging: false,
+        lastPtrX: 0,
+        lastPtrY: 0,
+
+        // Code pane auto-scroll state
+        codeHovering: false,
+        codeScrollPos: 0
+      };
+
+      const stagePane = document.getElementById('stagePane');
+      const canvas = document.getElementById('nuggetCanvas');
+      const ctx = canvas ? canvas.getContext('2d', { alpha: false }) : null;
+
+      // Low-res offscreen glow buffer (1px per ASCII cell) for warm ambient bloom
+      const glowCanvas = document.createElement('canvas');
+      const glowCtx = glowCanvas.getContext('2d');
+
+      const ui = {
+        timerDot: document.getElementById('timerDot'),
+        timerReadout: document.getElementById('timerReadout'),
+        telemetryLine1: document.getElementById('telemetryLine1'),
+        telemetryLine2: document.getElementById('telemetryLine2'),
+        modeBtns: document.querySelectorAll('[data-mode]'),
+        codeToggleBtn: document.getElementById('codeToggleBtn'),
+        pauseToggleBtn: document.getElementById('pauseToggleBtn'),
+        runDot: document.getElementById('runDot'),
+        statusReadout: document.getElementById('statusReadout'),
+        codePane: document.getElementById('codePane'),
+        codeContent: document.getElementById('codeContent')
+      };
+
+      if (!stagePane || !canvas || !ctx || !glowCtx) {
+        return;
+      }
+
+      /* ========================================================================
+         3. VIEWPORT & ASCII GRID METRICS (Defensive Sizing + Aspect Correction)
+         ======================================================================== */
+      let paneW = 800;
+      let paneH = 440;
+      let dpr = 1;
+
+      let cols = 140;
+      let rows = 44;
+      let cellW = 5.7;
+      let cellH = 10.5;
+      let fontSize = 10.0;
+
+      let glowImageData = null;
+      let glowPixels = null;
+
+      // Precomputed ray directions for every cell (recomputed only on resize)
+      let rayDirX = new Float32Array(0);
+      let rayDirY = new Float32Array(0);
+      let rayDirZ = new Float32Array(0);
+      let screenU = new Float32Array(0);
+      let screenV = new Float32Array(0);
+
+      // Camera distance & FOV tuned so the nugget fills ~75-85% of canvas height
+      const CAM_DIST = 2.68;
+      const FOV_TAN  = 0.44; // Half-height at z=0 is ~1.18 world units
+
+      function handleResize() {
+        const rect = stagePane.getBoundingClientRect();
+        const fallbackW = window.innerWidth || 800;
+        const fallbackH = Math.floor((window.innerHeight || 600) * (state.codeVisible ? 0.66 : 0.94));
+
+        paneW = Math.max(260, Math.floor(rect.width > 10 ? rect.width : fallbackW));
+        paneH = Math.max(180, Math.floor(rect.height > 10 ? rect.height : fallbackH));
+        dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+        canvas.width = Math.max(1, Math.floor(paneW * dpr));
+        canvas.height = Math.max(1, Math.floor(paneH * dpr));
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+        // Target ~130-156 columns on desktop, ~82-112 on compact screens
+        const targetCols = paneW < 560
+          ? Math.max(76, Math.min(104, Math.floor(paneW / 4.8)))
+          : Math.max(124, Math.min(156, Math.floor(paneW / 6.8)));
+
+        cols = targetCols;
+        cellW = paneW / cols;
+
+        // Proper monospace aspect ratio (~0.52 width-to-height)
+        const idealCellH = cellW / 0.52;
+        rows = Math.max(26, Math.min(82, Math.round(paneH / idealCellH)));
+        cellH = paneH / rows;
+        fontSize = Math.max(7.2, Math.min(14.0, cellH * 0.94));
+
+        // Allocate low-res glow buffer matching grid
+        glowCanvas.width = cols;
+        glowCanvas.height = rows;
+        glowImageData = glowCtx.createImageData(cols, rows);
+        glowPixels = glowImageData.data;
+
+        // Precompute normalized camera rays with exact pixel-space aspect ratio
+        const total = cols * rows;
+        rayDirX = new Float32Array(total);
+        rayDirY = new Float32Array(total);
+        rayDirZ = new Float32Array(total);
+        screenU = new Float32Array(total);
+        screenV = new Float32Array(total);
+
+        const halfW = paneW * 0.5;
+        const halfH = paneH * 0.5;
+        const scaleDenom = Math.min(halfH, halfW * 0.92);
+
+        let idx = 0;
+        for (let r = 0; r < rows; r++) {
+          const py = (r + 0.5) * cellH;
+          const v = (halfH - py) / scaleDenom; // +1 at top, -1 at bottom
+          for (let c = 0; c < cols; c++) {
+            const px = (c + 0.5) * cellW;
+            const u = (px - halfW) / scaleDenom;
+
+            screenU[idx] = u;
+            screenV[idx] = v;
+
+            const dx = u * FOV_TAN * 2.25;
+            const dy = v * FOV_TAN * 2.25;
+            const dz = -1.0;
+            const invLen = 1.0 / Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+            rayDirX[idx] = dx * invLen;
+            rayDirY[idx] = dy * invLen;
+            rayDirZ[idx] = dz * invLen;
+            idx++;
+          }
+        }
+      }
+
+      /* ========================================================================
+         4. 3D SDF PRIMITIVES & CRISPY BREADING fBM NOISE
+         ======================================================================== */
+      // Polynomial smooth minimum for organic blended lobes
+      function smin(a, b, k) {
+        const h = Math.max(k - Math.abs(a - b), 0.0) / k;
+        return Math.min(a, b) - h * h * k * 0.25;
+      }
+
+      // Fast distance to an axis-aligned ellipsoid centered at (cx, cy, cz)
+      function sdEllipsoid(px, py, pz, cx, cy, cz, rx, ry, rz) {
+        const qx = px - cx;
+        const qy = py - cy;
+        const qz = pz - cz;
+
+        const k0x = qx / rx;
+        const k0y = qy / ry;
+        const k0z = qz / rz;
+        const k0 = Math.sqrt(k0x * k0x + k0y * k0y + k0z * k0z);
+
+        const k1x = qx / (rx * rx);
+        const k1y = qy / (ry * ry);
+        const k1z = qz / (rz * rz);
+        const k1 = Math.sqrt(k1x * k1x + k1y * k1y + k1z * k1z) + 1e-6;
+
+        return (k0 * (k0 - 1.0)) / k1;
+      }
+
+      // Fast 3D gyroid-style multi-octave fBM for organic lumpy breading
+      // Returns roughly [-1, +1]
+      function breadingCoarse(x, y, z) {
+        // Octave 1: medium batter lumps
+        const g1 =
+          Math.sin(x * 4.7 + Math.cos(y * 4.3 + z * 3.9)) *
+          Math.cos(y * 4.9 - Math.sin(z * 4.5 - x * 3.7));
+        // Octave 2: crispy batter ridges
+        const g2 =
+          Math.sin(x * 10.3 - z * 9.7 + 1.4) *
+          Math.cos(y * 10.9 + x * 8.9 - 0.8) +
+          Math.sin(z * 11.4 + y * 9.3);
+        return g1 * 0.58 + g2 * 0.24;
+      }
+
+      // High-frequency crispy flakes, crumbs & deep-fried pores (evaluated at hit)
+      // Returns [0, 1] where 0 = deep dark crevice/pore, 1 = raised golden flake
+      function breadingFine(x, y, z) {
+        const a = Math.sin(x * 18.5 + y * 13.2) * Math.cos(z * 19.1 - x * 11.4);
+        const b = Math.sin(y * 27.3 - z * 24.7 + 1.1) * Math.cos(x * 26.1 + y * 17.8);
+        const c = Math.sin((x + y + z) * 38.0) * Math.cos((x - y + z) * 35.0);
+        // Crispy flake ridge shaping (sharp peaks, pitted valleys)
+        const raw = a * 0.50 + b * 0.34 + c * 0.16;
+        const flake = 0.5 + 0.5 * raw;
+        return flake * flake * (3.0 - 2.0 * flake);
+      }
+
+      // Subtle seasoning / pepper / paprika speck pattern
+      function seasoningSpeck(x, y, z) {
+        const s =
+          Math.sin(x * 43.0 + 0.7) *
+          Math.sin(y * 47.0 - 1.3) *
+          Math.sin(z * 41.0 + 2.1);
+        return s > 0.42 ? (s - 0.42) * 1.72 : 0.0;
+      }
+
+      /* ========================================================================
+         5. CHICKEN NUGGET SDF SHAPES (BOOT, BELL, SPICY)
+         ======================================================================== */
+      let activeModeCfg = MODES.boot;
+
+      function mapNugget(x, y, z) {
+        let d;
+        const mode = state.mode;
+
+        if (mode === 'boot') {
+          // Iconic "Boot" McNugget: plump rounded body + upper heel + protruding toe
+          const body = sdEllipsoid(x, y, z, -0.08,  0.04, 0.00, 0.62, 0.72, 0.37);
+          const heel = sdEllipsoid(x, y, z, -0.24,  0.48, 0.02, 0.48, 0.44, 0.35);
+          const toe  = sdEllipsoid(x, y, z,  0.44, -0.34, -0.02, 0.52, 0.36, 0.33);
+          const sole = sdEllipsoid(x, y, z, -0.10, -0.44, 0.01, 0.58, 0.35, 0.34);
+
+          d = smin(body, heel, 0.34);
+          d = smin(d, toe, 0.32);
+          d = smin(d, sole, 0.28);
+        } else if (mode === 'bell') {
+          // Iconic "Bell" McNugget: tapered crown + broad double-lobed base
+          const crown  = sdEllipsoid(x, y, z,  0.00,  0.34, 0.00, 0.52, 0.58, 0.37);
+          const baseL  = sdEllipsoid(x, y, z, -0.34, -0.30, 0.02, 0.54, 0.44, 0.36);
+          const baseR  = sdEllipsoid(x, y, z,  0.34, -0.28, -0.02, 0.54, 0.45, 0.36);
+          const center = sdEllipsoid(x, y, z,  0.00, -0.16, 0.03, 0.66, 0.48, 0.38);
+
+          d = smin(crown, center, 0.36);
+          d = smin(d, baseL, 0.32);
+          d = smin(d, baseR, 0.32);
+        } else {
+          // "Spicy": chunky, jagged double-dredged tender-nugget
+          const core  = sdEllipsoid(x, y, z,  0.00,  0.00, 0.00, 0.76, 0.62, 0.38);
+          const nubA  = sdEllipsoid(x, y, z, -0.48,  0.30, 0.05, 0.44, 0.42, 0.34);
+          const nubB  = sdEllipsoid(x, y, z,  0.52, -0.22, -0.04, 0.48, 0.38, 0.34);
+          const nubC  = sdEllipsoid(x, y, z,  0.14,  0.48, -0.03, 0.42, 0.36, 0.32);
+          const nubD  = sdEllipsoid(x, y, z, -0.22, -0.46, 0.04, 0.44, 0.34, 0.33);
+
+          d = smin(core, nubA, 0.24);
+          d = smin(d, nubB, 0.24);
+          d = smin(d, nubC, 0.22);
+          d = smin(d, nubD, 0.22);
+        }
+
+        // Organic batter lumpiness & crispy fried displacement
+        const lump =
+          Math.sin(x * 2.6 + 0.4) * Math.cos(y * 2.4 - 0.3) * 0.045 +
+          breadingCoarse(x, y, z) * activeModeCfg.dispAmp;
+
+        return d - lump;
+      }
+
+      /* ========================================================================
+         6. LIGHTING VECTORS & GOLDEN-BROWN PALETTE SHADER
+         ======================================================================== */
+      // Pre-normalized light directions in world/camera space
+      function norm3(x, y, z) {
+        const l = Math.sqrt(x * x + y * y + z * z) || 1;
+        return [x / l, y / l, z / l];
+      }
+
+      const KEY_L  = norm3(-0.52, 0.68, 0.86);  // Warm fryer/studio key top-left-front
+      const FILL_L = norm3(0.65, -0.42, 0.45);  // Warm bounce fill bottom-right
+      const RIM_L  = norm3(0.42, 0.56, -0.78);  // Back-top-right crispy silhouette rim
+
+      // Precomputed rotation matrix (world -> object local space)
+      let m00 = 1, m01 = 0, m02 = 0;
+      let m10 = 0, m11 = 1, m12 = 0;
+      let m20 = 0, m21 = 0, m22 = 1;
+
+      function updateRotationMatrix(rx, ry, rz) {
+        const cx = Math.cos(rx), sx = Math.sin(rx);
+        const cy = Math.cos(ry), sy = Math.sin(ry);
+        const cz = Math.cos(rz), sz = Math.sin(rz);
+
+        // R = Rz * Rx * Ry (we store transpose for world->local transform)
+        const r00 = cy * cz - sx * sy * sz;
+        const r01 = -cx * sz;
+        const r02 = sy * cz + sx * cy * sz;
+
+        const r10 = cy * sz + sx * sy * cz;
+        const r11 = cx * cz;
+        const r12 = sy * sz - sx * cy * cz;
+
+        const r20 = -cx * sy;
+        const r21 = sx;
+        const r22 = cx * cy;
+
+        // Transpose (inverse of orthonormal rotation)
+        m00 = r00; m01 = r10; m02 = r20;
+        m10 = r01; m11 = r11; m12 = r21;
+        m20 = r02; m21 = r12; m22 = r22;
+      }
+
+      /* ========================================================================
+         7. REAL-TIME 3D ASCII RAYMARCHING FRAME RENDERER
+         ======================================================================== */
+      function renderFrame(t) {
+        activeModeCfg = MODES[state.mode];
+        const boundR = activeModeCfg.boundR;
+        const boundR2 = boundR * boundR;
+        const spice = activeModeCfg.spiceShift;
+        const bumpAmt = activeModeCfg.detailBump;
+
+        // Subtle organic vertical hover so the nugget feels alive
+        const bobY = Math.sin(t * 1.45) * 0.032;
+
+        // Update inverse rotation matrix (world -> nugget local space)
+        updateRotationMatrix(state.rotX, state.rotY, state.rotZ);
+
+        // Transform camera origin (0, bobY, CAM_DIST) into nugget local space
+        const camY = -bobY;
+        const roX = m01 * camY + m02 * CAM_DIST;
+        const roY = m11 * camY + m12 * CAM_DIST;
+        const roZ = m21 * camY + m22 * CAM_DIST;
+
+        // Transform light directions into nugget local space once per frame
+        const kLx = m00 * KEY_L[0]  + m01 * KEY_L[1]  + m02 * KEY_L[2];
+        const kLy = m10 * KEY_L[0]  + m11 * KEY_L[1]  + m12 * KEY_L[2];
+        const kLz = m20 * KEY_L[0]  + m21 * KEY_L[1]  + m22 * KEY_L[2];
+
+        const fLx = m00 * FILL_L[0] + m01 * FILL_L[1] + m02 * FILL_L[2];
+        const fLy = m10 * FILL_L[0] + m11 * FILL_L[1] + m12 * FILL_L[2];
+        const fLz = m20 * FILL_L[0] + m21 * FILL_L[1] + m22 * FILL_L[2];
+
+        const rLx = m00 * RIM_L[0]  + m01 * RIM_L[1]  + m02 * RIM_L[2];
+        const rLy = m10 * RIM_L[0]  + m11 * RIM_L[1]  + m12 * RIM_L[2];
+        const rLz = m20 * RIM_L[0]  + m21 * RIM_L[1]  + m22 * RIM_L[2];
+
+        // First pass: evaluate raymarching per cell, store glyphs & colors, fill glow buffer
+        const total = cols * rows;
+        const cellGlyph = new Int8Array(total); // -1 = empty, >=0 = ASCII_RAMP idx, -2..-6 = steam
+        const cellR = new Uint8Array(total);
+        const cellG = new Uint8Array(total);
+        const cellB = new Uint8Array(total);
+
+        // Clear glow buffer to warm charcoal #090807
+        for (let i = 0; i < total; i++) {
+          const p = i << 2;
+          glowPixels[p]     = 9;
+          glowPixels[p + 1] = 8;
+          glowPixels[p + 2] = 7;
+          glowPixels[p + 3] = 255;
+        }
+
+        let charCount = 0;
+
+        for (let r = 0; r < rows; r++) {
+          const rowOff = r * cols;
+          for (let c = 0; c < cols; c++) {
+            const idx = rowOff + c;
+            const u = screenU[idx];
+            const v = screenV[idx];
+
+            // Rotate ray direction into nugget local space
+            const wdx = rayDirX[idx];
+            const wdy = rayDirY[idx];
+            const wdz = rayDirZ[idx];
+
+            const rdX = m00 * wdx + m01 * wdy + m02 * wdz;
+            const rdY = m10 * wdx + m11 * wdy + m12 * wdz;
+            const rdZ = m20 * wdx + m21 * wdy + m22 * wdz;
+
+            // Analytical bounding-sphere intersection for fast early-out
+            const b = roX * rdX + roY * rdY + roZ * rdZ;
+            const cSphere = (roX * roX + roY * roY + roZ * roZ) - boundR2;
+            const disc = b * b - cSphere;
+
+            let hit = false;
+            let tRay = 0;
+            let px = 0, py = 0, pz = 0;
+
+            if (disc > 0) {
+              const sqrtD = Math.sqrt(disc);
+              let tCur = Math.max(0.1, -b - sqrtD);
+              const tMax = -b + sqrtD;
+
+              // Raymarch SDF inside bounding sphere
+              for (let step = 0; step < 36; step++) {
+                px = roX + rdX * tCur;
+                py = roY + rdY * tCur;
+                pz = roZ + rdZ * tCur;
+
+                const d = mapNugget(px, py, pz);
+                if (d < 0.0045) {
+                  hit = true;
+                  tRay = tCur;
+                  break;
+                }
+                tCur += d * 0.78;
+                if (tCur > tMax) break;
+              }
+            }
+
+            if (hit) {
+              // Surface normal via tetrahedron / central differences
+              const eps = 0.008;
+              let nx = mapNugget(px + eps, py, pz) - mapNugget(px - eps, py, pz);
+              let ny = mapNugget(px, py + eps, pz) - mapNugget(px, py - eps, pz);
+              let nz = mapNugget(px, py, pz + eps) - mapNugget(px, py, pz - eps);
+              const invN = 1.0 / (Math.sqrt(nx * nx + ny * ny + nz * nz) + 1e-6);
+              nx *= invN; ny *= invN; nz *= invN;
+
+              // High-frequency crispy breading flake detail & normal perturbation
+              const f0 = breadingFine(px, py, pz);
+              const be = 0.014;
+              const bx = (breadingFine(px + be, py, pz) - f0) / be;
+              const by = (breadingFine(px, py + be, pz) - f0) / be;
+              const bz = (breadingFine(px, py, pz + be) - f0) / be;
+
+              nx += bx * bumpAmt * 0.065;
+              ny += by * bumpAmt * 0.065;
+              nz += bz * bumpAmt * 0.065;
+              const invNB = 1.0 / (Math.sqrt(nx * nx + ny * ny + nz * nz) + 1e-6);
+              nx *= invNB; ny *= invNB; nz *= invNB;
+
+              // Fake ambient occlusion from breading crevices + large concavity
+              const coarseVal = 0.5 + 0.5 * breadingCoarse(px, py, pz);
+              const ao = 0.38 + 0.42 * f0 + 0.20 * Math.max(0, Math.min(1, coarseVal));
+
+              // Dual lighting: warm key + soft warm fill + crispy silhouette rim
+              const ndlKey  = Math.max(0, nx * kLx + ny * kLy + nz * kLz);
+              const ndlFill = Math.max(0, nx * fLx + ny * fLy + nz * fLz);
+              const ndlRim  = Math.max(0, nx * rLx + ny * rLy + nz * rLz);
+
+              // View vector (from hit point toward camera = -rd)
+              const vx = -rdX, vy = -rdY, vz = -rdZ;
+              const ndv = Math.max(0, nx * vx + ny * vy + nz * vz);
+
+              // Blinn-Phong fried oil-sheen specular highlight on raised flakes
+              let hx = kLx + vx, hy = kLy + vy, hz = kLz + vz;
+              const invH = 1.0 / (Math.sqrt(hx * hx + hy * hy + hz * hz) + 1e-6);
+              hx *= invH; hy *= invH; hz *= invH;
+              const ndh = Math.max(0, nx * hx + ny * hy + nz * hz);
+              const spec = Math.pow(ndh, 24.0) * (0.35 + 0.85 * f0);
+
+              // Warm crispy Fresnel rim
+              const fresnel = Math.pow(1.0 - ndv, 2.6);
+              const rim = fresnel * (0.28 + 0.72 * ndlRim) * (0.55 + 0.45 * f0);
+
+              // Combined shading energy
+              const shade = (0.14 + 0.86 * ndlKey + 0.22 * ndlFill) * ao + rim * 0.52;
+
+              // Seasoning specks (dark toasted pepper / fiery paprika)
+              const speck = seasoningSpeck(px, py, pz);
+
+              // Map shading & breading detail to delicious golden-brown RGB palette:
+              // Crevices: #3d1804 / #6e2d08 -> Mid: #c46a14 / #e59322 -> Crispy High: #ffd060 / #fff0bd
+              const s = Math.max(0, Math.min(1.25, shade));
+              let cr, cg, cb;
+
+              if (s < 0.48) {
+                const k = s / 0.48;
+                cr = 56  + k * (196 - 56);
+                cg = 21  + k * (106 - 21);
+                cb = 4   + k * (20  - 4);
+              } else if (s < 0.92) {
+                const k = (s - 0.48) / 0.44;
+                cr = 196 + k * (252 - 196);
+                cg = 106 + k * (198 - 106);
+                cb = 20  + k * (82  - 20);
+              } else {
+                const k = Math.min(1, (s - 0.92) / 0.33);
+                cr = 252 + k * (255 - 252);
+                cg = 198 + k * (238 - 198);
+                cb = 82  + k * (178 - 82);
+              }
+
+              // Add golden oil-sheen specular highlight
+              cr += spec * 115;
+              cg += spec * 100;
+              cb += spec * 72;
+
+              // Subtle crispy flake brightness micro-contrast
+              const flakeBoost = (f0 - 0.45) * 28;
+              cr += flakeBoost;
+              cg += flakeBoost * 0.76;
+              cb += flakeBoost * 0.32;
+
+              // Spicy mode paprika-orange-red tint & cayenne specks
+              if (spice > 0.01) {
+                cr = cr * (1.0 + 0.10 * spice) + 12 * spice;
+                cg = cg * (1.0 - 0.24 * spice);
+                cb = cb * (1.0 - 0.32 * spice);
+                if (speck > 0) {
+                  cr += speck * 45 * spice;
+                  cg -= speck * 55 * spice;
+                  cb -= speck * 25 * spice;
+                }
+              } else if (speck > 0) {
+                // Mild toasted pepper/herb fleck on boot & bell
+                cr -= speck * 36;
+                cg -= speck * 28;
+                cb -= speck * 12;
+              }
+
+              const r8 = Math.max(0, Math.min(255, cr | 0));
+              const g8 = Math.max(0, Math.min(255, cg | 0));
+              const b8 = Math.max(0, Math.min(255, cb | 0));
+
+              // Perceptual luminance -> dense ASCII glyph index
+              const lum = (r8 * 77 + g8 * 150 + b8 * 29) >> 8;
+              const gIdx = Math.max(2, Math.min(RAMP_MAX, Math.floor((lum / 245) * RAMP_MAX)));
+
+              cellGlyph[idx] = gIdx;
+              cellR[idx] = r8;
+              cellG[idx] = g8;
+              cellB[idx] = b8;
+
+              const gp = idx << 2;
+              glowPixels[gp]     = r8;
+              glowPixels[gp + 1] = g8;
+              glowPixels[gp + 2] = b8;
+              charCount++;
+            } else {
+              // ---------------- BACKGROUND: STEAM WISPS & GROUND SHADOW ----------------
+              cellGlyph[idx] = -1;
+
+              // 1. Soft dark ambient shadow beneath the floating nugget
+              const shX = u / 0.78;
+              const shY = (v + 0.90) / 0.14;
+              const shDist2 = shX * shX + shY * shY;
+              if (shDist2 < 1.0) {
+                const sAmt = 1.0 - shDist2;
+                const shChar = sAmt > 0.55 ? 2 : 1; // ':' or '.'
+                cellGlyph[idx] = shChar;
+                const val = Math.floor(34 + sAmt * 30);
+                cellR[idx] = val + 8;
+                cellG[idx] = val;
+                cellB[idx] = Math.max(8, val - 10);
+                charCount++;
+                continue;
+              }
+
+              // 2. Subtle animated ASCII steam wisps rising from top of hot nugget
+              if (v > 0.36 && v < 1.12 && Math.abs(u) < 0.72) {
+                const rise = v - 0.36;
+                const fadeH = Math.sin(Math.min(1, rise / 0.76) * Math.PI);
+                const wave1 = Math.sin(u * 10.5 + Math.sin(v * 6.0 - t * 2.2) * 1.4);
+                const wave2 = Math.cos(u * 6.2 - v * 4.8 + t * 1.65);
+                const wisp = wave1 * wave2 * fadeH * (1.0 - Math.abs(u) / 0.74);
+
+                if (wisp > 0.34) {
+                  const sIdx = Math.floor((u * 13 + v * 17 - t * 3.0) & 3);
+                  const steamChoice = Math.abs(Math.floor(u * 19 + v * 11 - t * 2.6)) % STEAM_CHARS.length;
+                  cellGlyph[idx] = -(2 + steamChoice);
+
+                  const alpha = Math.min(1, (wisp - 0.34) * 2.6);
+                  const base = Math.floor(62 + alpha * 105);
+                  cellR[idx] = Math.min(255, base + 22);
+                  cellG[idx] = Math.min(255, base + 12);
+                  cellB[idx] = base;
+                  charCount++;
+                }
+              }
+            }
+          }
+        }
+
+        state.liveChars = charCount;
+
+        // ---------------- COMPOSITE FRAME TO DISPLAY CANVAS ----------------
+        ctx.fillStyle = '#090807';
+        ctx.fillRect(0, 0, paneW, paneH);
+
+        // Subtle warm underglow layer beneath the ASCII characters
+        glowCtx.putImageData(glowImageData, 0, 0);
+        ctx.save();
+        ctx.imageSmoothingEnabled = true;
+        ctx.globalAlpha = 0.26;
+        ctx.drawImage(glowCanvas, 0, 0, paneW, paneH);
+        ctx.restore();
+
+        // Draw crisp colored ASCII glyphs
+        ctx.font = '600 ' + fontSize + 'px "Cascadia Code", "Fira Code", "Consolas", "Courier New", monospace';
+        ctx.textBaseline = 'top';
+        ctx.textAlign = 'left';
+
+        let lastColorKey = -1;
+
+        for (let r = 0; r < rows; r++) {
+          const rowOff = r * cols;
+          const drawY = r * cellH;
+          for (let c = 0; c < cols; c++) {
+            const idx = rowOff + c;
+            const gCode = cellGlyph[idx];
+            if (gCode === -1) continue;
+
+            // Quantize RGB slightly (multiple of 4) to batch fillStyle changes
+            const cr = cellR[idx] & 252;
+            const cg = cellG[idx] & 252;
+            const cb = cellB[idx] & 252;
+            const colorKey = (cr << 16) | (cg << 8) | cb;
+
+            if (colorKey !== lastColorKey) {
+              ctx.fillStyle = 'rgb(' + cr + ',' + cg + ',' + cb + ')';
+              lastColorKey = colorKey;
+            }
+
+            const ch = gCode >= 0 ? ASCII_RAMP[gCode] : STEAM_CHARS[-(gCode + 2)];
+            ctx.fillText(ch, c * cellW, drawY);
+          }
+        }
+      }
+
+      /* ========================================================================
+         8. AUTO-SCROLLING SYNTAX-HIGHLIGHTED PYTHON SOURCE PANE
+         ======================================================================== */
+      function buildPythonSource(mode) {
+        const cfg = MODES[mode];
+        const M_UP = mode.toUpperCase();
+        const lobesBlock =
+          mode === 'boot'
+            ? [
+                '    body = sd_ellipsoid(p, (-0.08,  0.04,  0.00), (0.62, 0.72, 0.37))',
+                '    heel = sd_ellipsoid(p, (-0.24,  0.48,  0.02), (0.48, 0.44, 0.35))',
+                '    toe  = sd_ellipsoid(p, ( 0.44, -0.34, -0.02), (0.52, 0.36, 0.33))',
+                '    sole = sd_ellipsoid(p, (-0.10, -0.44,  0.01), (0.58, 0.35, 0.34))',
+                '    d = smin(smin(body, heel, 0.34), smin(toe, sole, 0.28), 0.32)'
+              ]
+            : mode === 'bell'
+            ? [
+                '    crown  = sd_ellipsoid(p, ( 0.00,  0.34,  0.00), (0.52, 0.58, 0.37))',
+                '    base_l = sd_ellipsoid(p, (-0.34, -0.30,  0.02), (0.54, 0.44, 0.36))',
+                '    base_r = sd_ellipsoid(p, ( 0.34, -0.28, -0.02), (0.54, 0.45, 0.36))',
+                '    center = sd_ellipsoid(p, ( 0.00, -0.16,  0.03), (0.66, 0.48, 0.38))',
+                '    d = smin(smin(crown, center, 0.36), smin(base_l, base_r, 0.32), 0.32)'
+              ]
+            : [
+                '    core  = sd_ellipsoid(p, ( 0.00,  0.00,  0.00), (0.76, 0.62, 0.38))',
+                '    nub_a = sd_ellipsoid(p, (-0.48,  0.30,  0.05), (0.44, 0.42, 0.34))',
+                '    nub_b = sd_ellipsoid(p, ( 0.52, -0.22, -0.04), (0.48, 0.38, 0.34))',
+                '    nub_c = sd_ellipsoid(p, ( 0.14,  0.48, -0.03), (0.42, 0.36, 0.32))',
+                '    d = smin(smin(core, nub_a, 0.24), smin(nub_b, nub_c, 0.22), 0.24)'
+              ];
+
+        const spiceComment =
+          mode === 'spicy'
+            ? '# cayenne & paprika crust glaze with extra jagged crumb flakes'
+            : '# deep-fried golden buttermilk breading with toasted crevices';
+
+        return [
+          '# golden_nugget_3d.py — real-time 3d sdf ascii raymarcher',
+          '# preset: ' + mode + ' (' + cfg.desc + ')',
+          'import math, numpy as np',
+          '',
+          'PRESET = "' + M_UP + '"',
+          'FRYER_TEMP_C, CRISP_INDEX = ' + cfg.tempBase + ', ' + cfg.crispBase,
+          'BREADING_DISP, MICRO_BUMP = ' + cfg.dispAmp.toFixed(3) + ', ' + cfg.detailBump.toFixed(2),
+          'ASCII_RAMP = " .,:;irsXA253hMHGS#9B&@"',
+          'PALETTE = [(61, 24, 4), (196, 106, 20), (255, 208, 96), (255, 240, 189)]',
+          '',
+          'def smin(a, b, k):',
+          '    # polynomial smooth minimum for organic battered lobes',
+          '    h = max(k - abs(a - b), 0.0) / k',
+          '    return min(a, b) - h * h * k * 0.25',
+          '',
+          'def breading_fbm(p):',
+          '    ' + spiceComment,
+          '    x, y, z = p',
+          '    g1 = math.sin(x * 4.7 + math.cos(y * 4.3 + z * 3.9))',
+          '    g2 = math.sin(x * 10.3 - z * 9.7) * math.cos(y * 10.9 + x * 8.9)',
+          '    return g1 * 0.58 + g2 * 0.24',
+          '',
+          'def map_' + mode + '_nugget(p):',
+          '    # giant ' + mode + ' chicken nugget signed distance field',
+          ...lobesBlock,
+          '    lump = math.sin(p[0] * 2.6) * math.cos(p[1] * 2.4) * 0.045',
+          '    return d - (lump + breading_fbm(p) * BREADING_DISP)',
+          '',
+          'def shade_crispy_crust(p, n, view_dir):',
+          '    # perturb normal with high-freq crunchy flakes & pores',
+          '    flake = breading_fine(p)',
+          '    n = normalize(n + grad_breading(p) * MICRO_BUMP)',
+          '    ao = 0.38 + 0.42 * flake + 0.20 * coarse_crevice(p)',
+          '    key  = max(0.0, dot(n, KEY_LIGHT))',
+          '    rim  = (1.0 - max(0.0, dot(n, view_dir))) ** 2.6',
+          '    spec = max(0.0, dot(n, half_vec(KEY_LIGHT, view_dir))) ** 24.0',
+          '    energy = (0.14 + 0.86 * key) * ao + rim * 0.52',
+          '    return toast_palette(energy, spec * flake, spicy=' + (mode === 'spicy' ? 'True' : 'False') + ')',
+          '',
+          'def raymarch_ascii_grid(cols, rows, rot_mat, t):',
+          '    # evaluate sdf directly per monospace cell with aspect correction',
+          '    chars_drawn = 0',
+          '    for r in range(rows):',
+          '        for c in range(cols):',
+          '            ro, rd = cell_ray(c, r, rot_mat)',
+          '            hit, pos = march_sphere_bounded(ro, rd, map_' + mode + '_nugget)',
+          '            if hit:',
+          '                rgb = shade_crispy_crust(pos, calc_normal(pos), -rd)',
+          '                glyph = ASCII_RAMP[luminance_index(rgb)]',
+          '                blit_glyph(c, r, glyph, rgb)',
+          '                chars_drawn += 1',
+          '            else:',
+          '                draw_steam_and_shadow(c, r, t)',
+          '    return chars_drawn'
+        ];
+      }
+
+      function escapeHtml(str) {
+        return str
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;');
+      }
+
+      function highlightPythonLine(rawLine) {
+        let codePart = rawLine;
+        let commentPart = '';
+        let inStr = false;
+
+        for (let i = 0; i < rawLine.length; i++) {
+          const ch = rawLine[i];
+          if (ch === '"' || ch === "'") inStr = !inStr;
+          if (ch === '#' && !inStr) {
+            codePart = rawLine.slice(0, i);
+            commentPart = rawLine.slice(i);
+            break;
+          }
+        }
+
+        let html = escapeHtml(codePart);
+        html = html.replace(/("[^"]*"|'[^']*')/g, '<span class="syn-str">$1</span>');
+        html = html.replace(
+          /\b(def|for|if|in|return|import|as|from|class|else|elif|while|and|or|not|None|True|False)\b/g,
+          '<span class="syn-kw">$1</span>'
+        );
+        html = html.replace(
+          /\b(np|math|smin|sd_ellipsoid|breading_fbm|breading_fine|grad_breading|coarse_crevice|map_boot_nugget|map_bell_nugget|map_spicy_nugget|shade_crispy_crust|toast_palette|raymarch_ascii_grid|cell_ray|march_sphere_bounded|calc_normal|luminance_index|blit_glyph|draw_steam_and_shadow|normalize|dot|half_vec|max|min|abs|range|sin|cos)\b/g,
+          '<span class="syn-fn">$1</span>'
+        );
+        html = html.replace(/\b([A-Z][A-Z0-9_]{2,})\b/g, '<span class="syn-cls">$1</span>');
+        html = html.replace(/\b(\d+(?:\.\d+)?)\b/g, '<span class="syn-num">$1</span>');
+
+        if (commentPart) {
+          html += '<span class="syn-cm">' + escapeHtml(commentPart) + '</span>';
+        }
+        return html;
+      }
+
+      let singleCodeHeight = 900;
+
+      function populateCodePane(mode) {
+        if (!ui.codeContent) return;
+        const lines = buildPythonSource(mode);
+        const allHtml = [];
+
+        // Duplicate source for seamless infinite auto-scroll loop
+        for (let copy = 0; copy < 2; copy++) {
+          for (let i = 0; i < lines.length; i++) {
+            allHtml.push(
+              '<div class="code-line"><span class="line-num">' + (i + 1) + '</span><span class="line-src">' + highlightPythonLine(lines[i]) + '</span></div>'
+            );
+          }
+          allHtml.push('<div class="code-line"><span class="line-num"></span><span class="line-src"> </span></div>');
+        }
+        ui.codeContent.innerHTML = allHtml.join('');
+
+        requestAnimationFrame(function () {
+          if (ui.codeContent && ui.codeContent.scrollHeight > 40) {
+            singleCodeHeight = ui.codeContent.scrollHeight / 2;
+          }
+        });
+      }
+
+      /* ========================================================================
+         9. UI CONTROLS & IN-CANVAS TELEMETRY
+         ======================================================================== */
+      function setMode(mode) {
+        if (!MODES[mode]) return;
+        state.mode = mode;
+        ui.modeBtns.forEach(function (btn) {
+          const m = btn.dataset.mode;
+          const isMatch = m === mode;
+          btn.classList.remove('active', 'active-boot', 'active-bell', 'active-spicy');
+          btn.setAttribute('aria-selected', String(isMatch));
+          btn.textContent = isMatch ? '[ ' + m + ' ]' : m;
+          if (isMatch) {
+            btn.classList.add('active', 'active-' + m);
+          }
+        });
+        populateCodePane(mode);
+        updateTelemetry(true);
+      }
+
+      function togglePause() {
+        state.paused = !state.paused;
+        if (ui.pauseToggleBtn) {
+          ui.pauseToggleBtn.textContent = state.paused ? '[ play ]' : 'pause';
+          ui.pauseToggleBtn.classList.toggle('toggle-on', state.paused);
+        }
+        if (ui.timerDot) {
+          ui.timerDot.className = state.paused ? 'status-dot dot-muted' : 'status-dot dot-gold';
+        }
+        if (ui.runDot) {
+          ui.runDot.className = state.paused ? 'status-dot dot-muted' : 'status-dot dot-amber';
+        }
+        updateTelemetry(true);
+      }
+
+      function toggleCodePane() {
+        state.codeVisible = !state.codeVisible;
+        if (ui.codePane) {
+          ui.codePane.classList.toggle('collapsed', !state.codeVisible);
+        }
+        stagePane.classList.toggle('expanded', !state.codeVisible);
+        if (ui.codeToggleBtn) {
+          ui.codeToggleBtn.classList.toggle('toggle-on', state.codeVisible);
+        }
+        requestAnimationFrame(handleResize);
+      }
+
+      let lastTelemetryTime = 0;
+      function updateTelemetry(force) {
+        const now = performance.now();
+        if (!force && now - lastTelemetryTime < 100) return;
+        lastTelemetryTime = now;
+
+        const cfg = MODES[state.mode];
+        const secs = state.simTime.toFixed(2).padStart(5, '0');
+        if (ui.timerReadout) {
+          ui.timerReadout.textContent = 't ' + secs + 's';
+        }
+
+        const liveTemp = Math.round(cfg.tempBase + Math.sin(state.simTime * 0.7) * 1.2);
+        if (ui.telemetryLine1) {
+          ui.telemetryLine1.textContent =
+            'nugget: ' + state.mode + '   temp: ' + liveTemp + '°C   crisp: ' + cfg.crispBase + '%';
+        }
+        if (ui.telemetryLine2) {
+          ui.telemetryLine2.textContent = 'chars: ' + state.liveChars.toLocaleString();
+        }
+        if (ui.statusReadout) {
+          ui.statusReadout.textContent = state.paused
+            ? 'paused'
+            : 'running · ' + Math.round(state.fps) + ' fps';
+        }
+      }
+
+      /* ========================================================================
+         10. MAIN ANIMATION LOOP (3D Rotation + Inertia + Auto-Scroll)
+         ======================================================================== */
+      let lastFrameTime = 0;
+
+      function animate(now) {
+        try {
+          if (!lastFrameTime) lastFrameTime = now;
+          const dt = Math.min(0.05, Math.max(0.001, (now - lastFrameTime) / 1000));
+          lastFrameTime = now;
+
+          state.fps = state.fps * 0.90 + (1 / dt) * 0.10;
+
+          if (!state.paused) {
+            state.simTime += dt;
+
+            if (!state.dragging) {
+              // Smoothly blend user drag inertia back into steady showcase tumble
+              const targetVelY = 0.62;
+              const blend = 1.0 - Math.exp(-dt * 2.2);
+              state.velY += (targetVelY - state.velY) * blend;
+              state.velX *= Math.exp(-dt * 3.4);
+
+              state.rotY += state.velY * dt;
+              state.rotX += state.velX * dt;
+
+              // Gently ease pitch toward a subtle appetizing showcase tilt
+              const targetTiltX = Math.sin(state.simTime * 0.68) * 0.24 + 0.10;
+              state.rotX += (targetTiltX - state.rotX) * (1.0 - Math.exp(-dt * 0.9));
+              state.rotZ = Math.sin(state.simTime * 0.45) * 0.12;
+            }
+
+            // Smooth auto-scroll on the Python code pane
+            if (state.codeVisible && !state.codeHovering && ui.codePane && singleCodeHeight > 50) {
+              state.codeScrollPos += dt * 21.0;
+              if (state.codeScrollPos >= singleCodeHeight) {
+                state.codeScrollPos -= singleCodeHeight;
+              }
+              ui.codePane.scrollTop = state.codeScrollPos;
+            }
+          }
+
+          renderFrame(state.simTime);
+          updateTelemetry(false);
+        } catch (err) {
+          // Keep render loop resilient on transient resize
+        }
+
+        window.requestAnimationFrame(animate);
+      }
+
+      /* ========================================================================
+         11. INTERACTIVE 3D DRAG, KEYBOARD SHORTCUTS & INITIALIZATION
+         ======================================================================== */
+      function beginDrag(clientX, clientY) {
+        state.dragging = true;
+        state.lastPtrX = clientX;
+        state.lastPtrY = clientY;
+        state.velX = 0;
+        state.velY = 0;
+        canvas.classList.add('dragging');
+      }
+
+      function moveDrag(clientX, clientY) {
+        if (!state.dragging) return;
+        const dx = clientX - state.lastPtrX;
+        const dy = clientY - state.lastPtrY;
+        state.lastPtrX = clientX;
+        state.lastPtrY = clientY;
+
+        const sens = 0.011;
+        state.rotY += dx * sens;
+        state.rotX = Math.max(-1.45, Math.min(1.45, state.rotX + dy * sens));
+
+        // Store smoothed inertia velocity for release
+        state.velY = dx * sens * 26.0;
+        state.velX = dy * sens * 26.0;
+      }
+
+      function endDrag() {
+        if (!state.dragging) return;
+        state.dragging = false;
+        canvas.classList.remove('dragging');
+      }
+
+      // Mouse drag
+      canvas.addEventListener('mousedown', function (e) {
+        beginDrag(e.clientX, e.clientY);
+      });
+      window.addEventListener('mousemove', function (e) {
+        if (state.dragging) moveDrag(e.clientX, e.clientY);
+      });
+      window.addEventListener('mouseup', endDrag);
+
+      // Touch drag
+      canvas.addEventListener('touchstart', function (e) {
+        if (e.touches && e.touches.length > 0) {
+          beginDrag(e.touches[0].clientX, e.touches[0].clientY);
+        }
+      }, { passive: true });
+      canvas.addEventListener('touchmove', function (e) {
+        if (state.dragging && e.touches && e.touches.length > 0) {
+          moveDrag(e.touches[0].clientX, e.touches[0].clientY);
+        }
+      }, { passive: true });
+      window.addEventListener('touchend', endDrag);
+      window.addEventListener('touchcancel', endDrag);
+
+      // Toolbar buttons
+      ui.modeBtns.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          setMode(btn.dataset.mode);
+        });
+      });
+
+      if (ui.codeToggleBtn) {
+        ui.codeToggleBtn.addEventListener('click', toggleCodePane);
+      }
+      if (ui.pauseToggleBtn) {
+        ui.pauseToggleBtn.addEventListener('click', togglePause);
+      }
+
+      // Pause code auto-scroll while reading/hovering
+      if (ui.codePane) {
+        ui.codePane.addEventListener('mouseenter', function () {
+          state.codeHovering = true;
+        });
+        ui.codePane.addEventListener('mouseleave', function () {
+          state.codeScrollPos = ui.codePane.scrollTop % (singleCodeHeight || 1);
+          state.codeHovering = false;
+        });
+        ui.codePane.addEventListener('touchstart', function () {
+          state.codeHovering = true;
+        }, { passive: true });
+        ui.codePane.addEventListener('touchend', function () {
+          state.codeScrollPos = ui.codePane.scrollTop % (singleCodeHeight || 1);
+          state.codeHovering = false;
+        }, { passive: true });
+      }
+
+      // Keyboard hotkeys: 1/2/3 presets, Space pause, C code pane
+      window.addEventListener('keydown', function (e) {
+        if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+        if (e.key === '1') setMode('boot');
+        else if (e.key === '2') setMode('bell');
+        else if (e.key === '3') setMode('spicy');
+        else if (e.code === 'Space') {
+          e.preventDefault();
+          togglePause();
+        } else if (e.key === 'c' || e.key === 'C') {
+          toggleCodePane();
+        }
+      });
+
+      // Defensive ResizeObserver + window resize
+      let resizeTimer = null;
+      function scheduleResize() {
+        if (resizeTimer) window.clearTimeout(resizeTimer);
+        resizeTimer = window.setTimeout(handleResize, 45);
+      }
+
+      window.addEventListener('resize', scheduleResize);
+      if (typeof ResizeObserver !== 'undefined') {
+        const ro = new ResizeObserver(scheduleResize);
+        ro.observe(stagePane);
+      }
+
+      // Immediate safe initialization
+      function init() {
+        handleResize();
+        setMode('boot');
+        window.requestAnimationFrame(animate);
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+      } else {
+        init();
+      }
+    })();
+  </script>
+</body>
+</html>
